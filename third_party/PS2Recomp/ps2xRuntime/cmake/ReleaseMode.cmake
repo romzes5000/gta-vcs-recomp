@@ -24,7 +24,7 @@ else()
 endif()
 # [gta-recomp] macOS / ARM64 (docs/MACOS.md): no x86 baseline. Apple Silicon builds for the M1 and newer (the SSE code
 # goes through sse2neon); an Intel Mac keeps PS2X_CPU's x86 level.
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64|ARM64")
+if(PS2X_IS_AARCH64_TARGET)
     if(APPLE)
         set(_ps2x_arch_clang "-mcpu=apple-m1")
     else()

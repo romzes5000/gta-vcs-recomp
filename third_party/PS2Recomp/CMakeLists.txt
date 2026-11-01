@@ -32,10 +32,16 @@ endif()
 
 set(PS2X_IS_ARM_TARGET OFF)
 set(PS2X_IS_AARCH64_TARGET OFF)
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64|ARM64")
+# [gta-recomp] the target CPU, not the host's: on macOS CMAKE_OSX_ARCHITECTURES picks it (an x86_64 build on Apple
+# Silicon runs under Rosetta and must not get sse2neon or ARM flags)
+set(PS2X_TARGET_PROCESSOR "${CMAKE_SYSTEM_PROCESSOR}")
+if(APPLE AND CMAKE_OSX_ARCHITECTURES)
+    set(PS2X_TARGET_PROCESSOR "${CMAKE_OSX_ARCHITECTURES}")
+endif()
+if(PS2X_TARGET_PROCESSOR MATCHES "arm64|aarch64|ARM64")
     set(PS2X_IS_ARM_TARGET ON)
     set(PS2X_IS_AARCH64_TARGET ON)
-elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^arm|^ARM")
+elseif(PS2X_TARGET_PROCESSOR MATCHES "^arm|^ARM")
     set(PS2X_IS_ARM_TARGET ON)
 endif()
 
