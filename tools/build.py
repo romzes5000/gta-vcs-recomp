@@ -180,6 +180,13 @@ def install_deps(env):
     no_polkit and the command to run in a terminal; a refused prompt is elevation_denied."""
     if tc.IS_WINDOWS:
         tc.fail("--install-deps is for Linux (Windows: tools/setup_vs.py install)", "unsupported")
+    if tc.IS_MAC:  # Homebrew needs no elevation
+        missing = tc.mac_missing(env)  # the launcher is not ported to macOS
+        formulas = sorted({f for _, f in missing})
+        if not formulas:
+            print("[deps] nothing to install")
+            return 0
+        return subprocess.run(["brew", "install"] + formulas, env=env).returncode
     tc.stage("packages", "Installing the packages the build needs")
     missing = tc.linux_missing(env, quiet=True) + tc.linux_missing(env, tc.LAUNCHER_LINUX_DEPS)
     if not missing:
