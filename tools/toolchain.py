@@ -49,6 +49,8 @@ def show(path):
         return path
     return path if rel.startswith("..") else rel
 IS_WINDOWS = platform.system() == "Windows"
+IS_MAC = platform.system() == "Darwin"  # Apple Silicon: SSE via sse2neon, Vulkan via MoltenVK (docs/MACOS.md)
+MIN_APPLE_CLANG = 17  # arm64 has no preserve_none in PS2_GUEST_CC, so Xcode's clang is enough
 
 # our progress lines and the tools' output interleave in order even when stdout is a pipe
 if hasattr(sys.stdout, "reconfigure"):
@@ -479,6 +481,12 @@ def cpu_name():
                 return " ".join(str(winreg.QueryValueEx(key, "ProcessorNameString")[0]).split())
         except OSError:
             return ""
+    if IS_MAC:
+        try:
+            return subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"], capture_output=True, text=True,
+                                  timeout=10).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            return ""
     try:
         with open("/proc/cpuinfo", encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -594,8 +602,21 @@ def clang_version(clang):
     return int(m.group(1)) if m else 0
 
 
+def _mac_llvm_bin(env):
+    """macOS: Homebrew's LLVM when installed (brew install llvm), else the clang on PATH (Xcode / Command Line Tools)."""
+    for d in ("/opt/homebrew/opt/llvm/bin", "/usr/local/opt/llvm/bin"):
+        if os.path.isfile(os.path.join(d, "clang")) and clang_version(os.path.join(d, "clang")) >= MIN_CLANG:
+            return d
+    on_path = _which("clang", env)
+    if on_path and clang_version(on_path) >= MIN_APPLE_CLANG:
+        return os.path.dirname(on_path)
+    return None
+
+
 def _linux_llvm_bin(env):
     """The bin folder of the newest LLVM >= MIN_CLANG: /usr/lib/llvm-<N>/bin (Debian / Ubuntu) or clang on PATH."""
+    if IS_MAC:
+        return _mac_llvm_bin(env)
     found = []
     for d in glob.glob("/usr/lib/llvm-*/bin") + glob.glob("/usr/lib64/llvm*/bin"):
         clang = os.path.join(d, "clang")
@@ -1143,6 +1164,11 @@ def compiler_defines(env):
     if IS_WINDOWS:
         return ["-DCMAKE_C_COMPILER=clang-cl", "-DCMAKE_CXX_COMPILER=clang-cl"] + ninja
     clang, clangxx = _which("clang", env), _which("clang++", env)
+    if IS_MAC:
+        if not clang or not clangxx or clang_version(clang) < MIN_APPLE_CLANG:
+            fail("clang %d or newer not found: xcode-select --install (or brew install llvm)" % MIN_APPLE_CLANG,
+                 "no_clang")
+        return ["-DCMAKE_C_COMPILER=" + clang, "-DCMAKE_CXX_COMPILER=" + clangxx] + ninja
     if not clang or not clangxx or clang_version(clang) < MIN_CLANG:
         fail("clang %d or newer not found - install it (docs/LINUX.md; e.g. sudo apt install clang-20 lld-20 llvm-20), "
              "or run python tools/build.py --check-deps" % MIN_CLANG)
@@ -1274,8 +1300,57 @@ def linux_install_command(packages, sudo="sudo"):
     return cmd + " ".join(packages).split()
 
 
+MAC_DEPS = [  # (label, check, Homebrew formula); SDL3 is built from source (Cocoa / CoreAudio need nothing extra)
+    ("git", "git", "git"),
+    ("CMake", "cmake", "cmake"),
+    ("Ninja", "ninja", "ninja"),
+    ("pkg-config", "pkg-config", "pkgconf"),
+    ("glslangValidator", "glslangValidator", "glslang"),
+    ("FFmpeg (movies)", "pc:libavcodec libavformat libavutil libswscale libswresample", "ffmpeg"),
+    ("Vulkan loader", "lib:libvulkan.1.dylib", "vulkan-loader"),
+    ("MoltenVK (Vulkan on Metal)", "lib:libMoltenVK.dylib", "molten-vk"),
+]
+MAC_LAUNCHER_DEPS = [
+    ("Vulkan headers (launcher)", "pc:vulkan", "vulkan-headers"),
+    ("fonts (launcher)", "pc:freetype2", "freetype"),
+]
+
+
+def _brew_prefix():
+    for d in ("/opt/homebrew", "/usr/local"):
+        if os.path.isdir(os.path.join(d, "lib")):
+            return d
+    return "/opt/homebrew"
+
+
+def mac_missing(env, deps=None):
+    missing = []
+    for label, check, formula in (MAC_DEPS if deps is None else MAC_LAUNCHER_DEPS):
+        if check.startswith("pc:"):
+            ok = bool(_which("pkg-config", env)) and subprocess.run(["pkg-config", "--exists"] + check[3:].split(),
+                                                                    env=env).returncode == 0
+        elif check.startswith("lib:"):
+            ok = os.path.isfile(os.path.join(_brew_prefix(), "lib", check[4:]))
+        else:
+            ok = bool(_which(check, env))
+        if not ok:
+            missing.append((label, formula))
+    if deps is None and not _mac_llvm_bin(env):
+        missing.append(("clang %d+ (Xcode Command Line Tools: xcode-select --install)" % MIN_APPLE_CLANG, "llvm"))
+    return missing
+
+
 def check_linux_deps(env, deps=None):
     """Missing build dependencies on Linux, with the install command for this distro; True when nothing is missing."""
+    if IS_MAC:
+        missing = mac_missing(env, deps)
+        if not missing:
+            print("[deps] all build dependencies found")
+            return True
+        for label, _ in missing:
+            print("[deps] missing: " + label)
+        print("[deps] install them with:\n    brew install " + " ".join(sorted({f for _, f in missing})))
+        return False
     missing = linux_missing(env, deps)
     if not missing:
         llvm = _linux_llvm_bin(env) if deps is None else None
