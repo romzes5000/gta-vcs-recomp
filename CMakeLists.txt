@@ -21,12 +21,20 @@ set(PS2X_BUILD_STUDIO OFF CACHE BOOL "" FORCE)
 # Linux (docs/LINUX.md): clang 19+ only - the same compiler as clang-cl on Windows, and PS2_GUEST_CC needs its
 # preserve_none. Linked with lld (ThinLTO). Compile and ThinLTO jobs follow the memory: a unity batch of generated
 # code takes up to ~2 GB to compile.
+# macOS (docs/MACOS.md): Apple clang 17+ (LLVM 19 based) or Homebrew's LLVM 19+, linked with Apple's ld (ld64 /
+# ld-prime, which does ThinLTO itself); Vulkan through MoltenVK.
 if(NOT WIN32)
-    if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_VERSION VERSION_LESS 19)
-        message(FATAL_ERROR "Linux builds need clang 19 or newer (found ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}). "
-                            "python tools/build.py picks it up when installed (docs/LINUX.md)")
+    if(APPLE AND CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+        if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 17)
+            message(FATAL_ERROR "macOS builds need Apple clang 17 (Xcode 16.3+) or newer, or Homebrew's llvm (found ${CMAKE_CXX_COMPILER_VERSION})")
+        endif()
+    elseif(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_VERSION VERSION_LESS 19)
+        message(FATAL_ERROR "Linux / macOS builds need clang 19 or newer (found ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}). "
+                            "python tools/build.py picks it up when installed (docs/LINUX.md, docs/MACOS.md)")
     endif()
-    add_link_options(-fuse-ld=lld)
+    if(NOT APPLE)
+        add_link_options(-fuse-ld=lld)
+    endif()
     cmake_host_system_information(RESULT _vcs_mem_mb QUERY TOTAL_PHYSICAL_MEMORY)
     cmake_host_system_information(RESULT _vcs_cores QUERY NUMBER_OF_LOGICAL_CORES)
     math(EXPR _vcs_jobs "${_vcs_mem_mb} / 2048")
@@ -40,7 +48,7 @@ if(NOT WIN32)
     set(PS2X_LTO_JOBS ${_vcs_jobs} CACHE STRING "Parallel ThinLTO backend jobs at the game's link")
     set_property(GLOBAL APPEND PROPERTY JOB_POOLS vcs_compile=${VCS_COMPILE_JOBS})
     set(CMAKE_JOB_POOL_COMPILE vcs_compile)
-    message(STATUS "Linux build: ${VCS_COMPILE_JOBS} compile jobs, ${PS2X_LTO_JOBS} ThinLTO jobs (${_vcs_mem_mb} MB memory)")
+    message(STATUS "${CMAKE_SYSTEM_NAME} build: ${VCS_COMPILE_JOBS} compile jobs, ${PS2X_LTO_JOBS} ThinLTO jobs (${_vcs_mem_mb} MB memory)")
 endif()
 
 set(VCS_HAVE_GENERATED OFF)
