@@ -71,7 +71,7 @@ python tools/doctor.py [--json]              # folder, compiler, disc, build sta
 python tools/build_dir.py [check|set P|reset] # the build folder elsewhere (.vcs-build-dir, VCS_BUILD_DIR): tc.BUILD follows;
                                              # the test tools keep writing to build\ in the source folder
 python tools/release.py [--ref vX | --worktree]   # the Windows release zip (build/dist); refuses game files. The number is
-                                             # VERSION (root; 0.1.0): bump it before tagging - the tag must match
+                                             # VERSION (root; 0.1.1): bump it before tagging - the tag must match
 python tools/deps.py list|fetch|check        # the libraries CMake downloads; deps/ makes the build offline
 python tools/backup.py create|list|restore   # memory card backups (VCS_DATA_DIR honoured: test on copies)
 python tools/setup_vs.py status|install [--dry-run]   # Visual Studio Build Tools (+ clang) from Microsoft, elevated
@@ -183,6 +183,9 @@ card copies to start from (never the user's live card).
 - `[main] fatal exception: No mapping for the Unicode character exists in the target multi-byte code page`, or a path
   full of `?`s: a non-ASCII folder seen through the ANSI code page - vcs.exe's UTF-8 manifest missing or ignored
   (`src/vcs.manifest`, DECISIONS.md 2026-11-01).
+- A save gone after saving (an empty slot file, or the whole save folder deleted): a card name the host could not
+  store, or a failed card write - the game deletes its save folder after one (game-internals.md 10f). The card is
+  zipped into `<data>/backups/auto-*.zip` before every change (`[MC] card backup` in the log).
 - First things to grep in a log: `[ee] thread N -> dormant`, `[guest-branch:unlisted-resume]`.
 
 ## Working style for long autonomous runs
