@@ -32,10 +32,16 @@ endif()
 
 set(PS2X_IS_ARM_TARGET OFF)
 set(PS2X_IS_AARCH64_TARGET OFF)
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64|ARM64")
+# [gta-recomp] the target CPU, not the host's: on macOS CMAKE_OSX_ARCHITECTURES picks it (an x86_64 build on Apple
+# Silicon runs under Rosetta and must not get sse2neon or ARM flags)
+set(PS2X_TARGET_PROCESSOR "${CMAKE_SYSTEM_PROCESSOR}")
+if(APPLE AND CMAKE_OSX_ARCHITECTURES)
+    set(PS2X_TARGET_PROCESSOR "${CMAKE_OSX_ARCHITECTURES}")
+endif()
+if(PS2X_TARGET_PROCESSOR MATCHES "arm64|aarch64|ARM64")
     set(PS2X_IS_ARM_TARGET ON)
     set(PS2X_IS_AARCH64_TARGET ON)
-elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^arm|^ARM")
+elseif(PS2X_TARGET_PROCESSOR MATCHES "^arm|^ARM")
     set(PS2X_IS_ARM_TARGET ON)
 endif()
 
@@ -58,6 +64,10 @@ if(PS2X_IS_ARM_TARGET)
 
     include_directories(${sse2neon_SOURCE_DIR})
     add_compile_definitions(USE_SSE2NEON)
+    # [gta-recomp] x86 MINPS/MAXPS return the 2nd operand when either input is NaN; NEON vmin/vmax return NaN.
+    # PS2 floats with exponent 255 are finite on hardware but NaN/Inf on the host, so VU MIN/MAX
+    # clamps must keep x86 semantics.
+    add_compile_definitions(SSE2NEON_PRECISE_MINMAX=1)
 
     if(PS2X_IS_AARCH64_TARGET AND APPLE)
         # macOS ARM64 already uses optimal defaults

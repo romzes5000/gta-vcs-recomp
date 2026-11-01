@@ -31,7 +31,11 @@
 #include <cstdlib>
 #include <cstring>
 #include <future>
+#if defined(USE_SSE2NEON) // [gta-recomp] ARM64 (macOS): SSE through sse2neon
+#include "sse2neon.h"
+#else
 #include <immintrin.h>
+#endif
 #include <iostream>
 #include <mutex>
 #include <thread>

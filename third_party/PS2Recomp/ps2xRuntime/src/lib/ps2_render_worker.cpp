@@ -10,12 +10,18 @@
 #include <cstdio>
 #include <cstdlib>
 #include <deque>
+#if defined(USE_SSE2NEON) // [gta-recomp] ARM64 (macOS): SSE through sse2neon
+#include "sse2neon.h"
+#else
 #include <immintrin.h>
+#endif
 #include <new>
 #include <exception>
 #include <mutex>
 #include <thread>
+#if !defined(USE_SSE2NEON)
 #include <xmmintrin.h>
+#endif
 #include <cstring>  // [gta-recomp] libstdc++ (Linux) does not bring it in
 
 namespace ps2_render_worker
