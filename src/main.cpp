@@ -7,6 +7,9 @@
 //
 // Without an argument it uses "iso=" from vcs.ini next to the exe, then the
 // first *.iso in the exe's folder or the current folder.
+#if defined(__APPLE__)
+#include <mach-o/dyld.h> // _NSGetExecutablePath
+#endif
 #include "ps2_runtime.h"
 #include "runtime/gs/gs_hw.h"
 #include "runtime/ps2_disc_image.h"
@@ -125,6 +128,15 @@ namespace
         const fs::path self = fs::read_symlink("/proc/self/exe", ec);
         if (!ec && !self.empty())
             return self.parent_path();
+#elif defined(__APPLE__)
+        char buffer[4096];
+        uint32_t size = sizeof(buffer);
+        if (_NSGetExecutablePath(buffer, &size) == 0)
+        {
+            std::error_code ec;
+            const fs::path self = fs::canonical(fs::path(buffer), ec);
+            return (ec ? fs::path(buffer) : self).parent_path();
+        }
 #endif
         return fs::current_path();
     }

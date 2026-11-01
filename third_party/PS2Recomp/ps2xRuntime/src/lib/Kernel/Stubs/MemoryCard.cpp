@@ -14,6 +14,8 @@
 #elif defined(__linux__)
 #include <fcntl.h>    // AT_FDCWD
 #include <sys/stat.h> // statx: the birth time
+#elif defined(__APPLE__)
+#include <sys/stat.h> // st_birthtimespec (APFS)
 #endif
 
 namespace ps2_stubs
@@ -320,6 +322,12 @@ namespace ps2_stubs
             {
                 const statx_timestamp &t = (st.stx_mask & STATX_BTIME) ? st.stx_btime : st.stx_mtime;
                 return static_cast<uint64_t>(t.tv_sec) * 1000000000ull + t.tv_nsec;
+            }
+#elif defined(__APPLE__)
+            struct stat st{};
+            if (stat(entry.path().c_str(), &st) == 0)
+            {
+                return static_cast<uint64_t>(st.st_birthtimespec.tv_sec) * 1000000000ull + st.st_birthtimespec.tv_nsec;
             }
 #endif
             std::error_code ec;
