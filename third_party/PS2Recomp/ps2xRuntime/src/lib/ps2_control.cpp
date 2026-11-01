@@ -1,4 +1,7 @@
 // [gta-recomp] Hidden test runs and remote control: see runtime/ps2_control.h.
+#if defined(__APPLE__)
+#include <csignal>
+#endif
 #include "runtime/ps2_control.h"
 #include "runtime/ps2_perf.h"
 
@@ -304,6 +307,9 @@ namespace ps2control
         WSADATA wsa;
         if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
             return;
+#endif
+#if defined(__APPLE__)
+        signal(SIGPIPE, SIG_IGN); // [gta-recomp] macOS has no MSG_NOSIGNAL: a client gone mid-reply must not end the game
 #endif
         g_listen = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         if (g_listen == kNoSocket)

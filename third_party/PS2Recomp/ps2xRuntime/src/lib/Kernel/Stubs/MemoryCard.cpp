@@ -16,6 +16,8 @@
 #elif defined(__linux__)
 #include <fcntl.h>    // AT_FDCWD
 #include <sys/stat.h> // statx: the birth time
+#elif defined(__APPLE__)
+#include <sys/stat.h> // [gta-recomp] st_birthtimespec: the birth time (APFS)
 #endif
 
 namespace ps2_stubs
@@ -394,6 +396,12 @@ namespace ps2_stubs
             {
                 const statx_timestamp &t = (st.stx_mask & STATX_BTIME) ? st.stx_btime : st.stx_mtime;
                 return static_cast<uint64_t>(t.tv_sec) * 1000000000ull + t.tv_nsec;
+            }
+#elif defined(__APPLE__)
+            struct stat st{};
+            if (stat(entry.path().c_str(), &st) == 0)
+            {
+                return static_cast<uint64_t>(st.st_birthtimespec.tv_sec) * 1000000000ull + st.st_birthtimespec.tv_nsec;
             }
 #endif
             std::error_code ec;
@@ -923,6 +931,14 @@ namespace ps2_stubs
             {
                 const double m = static_cast<double>(st.stx_mtime.tv_sec) + st.stx_mtime.tv_nsec / 1e9;
                 const double b = (st.stx_mask & STATX_BTIME) ? static_cast<double>(st.stx_btime.tv_sec) + st.stx_btime.tv_nsec / 1e9 : m;
+                return {b, m};
+            }
+#elif defined(__APPLE__)
+            struct stat st{};
+            if (stat(path.c_str(), &st) == 0)
+            {
+                const double m = static_cast<double>(st.st_mtimespec.tv_sec) + st.st_mtimespec.tv_nsec / 1e9;
+                const double b = static_cast<double>(st.st_birthtimespec.tv_sec) + st.st_birthtimespec.tv_nsec / 1e9;
                 return {b, m};
             }
 #endif
