@@ -16,6 +16,9 @@
 //   a pass's targets are in their attachment layouts while it lasts.
 // - New render targets and depth textures start cleared to zero (D3D drivers hand them out that way).
 // - Objects freed while the GPU may still use them are destroyed when their frame's fence has passed.
+#if defined(__APPLE__)
+#include <dlfcn.h>
+#endif
 #include "rhi/rhi.h"
 
 #include <volk.h>
@@ -379,7 +382,22 @@ namespace rhi
 
             bool create(const DeviceDesc &desc, std::string &error)
             {
-                if (volkInitialize() != VK_SUCCESS)
+                VkResult loaded = volkInitialize();
+#if defined(__APPLE__)
+                // [macOS] dlopen("libvulkan.dylib") misses Homebrew's prefix: try vulkan-loader there (it finds MoltenVK)
+                for (const char *path : {"/opt/homebrew/lib/libvulkan.1.dylib", "/usr/local/lib/libvulkan.1.dylib",
+                                         "/opt/homebrew/lib/libMoltenVK.dylib", "/usr/local/lib/libMoltenVK.dylib"})
+                {
+                    if (loaded == VK_SUCCESS)
+                        break;
+                    if (void *lib = dlopen(path, RTLD_NOW | RTLD_LOCAL))
+                    {
+                        volkInitializeCustom(reinterpret_cast<PFN_vkGetInstanceProcAddr>(dlsym(lib, "vkGetInstanceProcAddr")));
+                        loaded = volkGetInstanceVersion() ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
+                    }
+                }
+#endif
+                if (loaded != VK_SUCCESS)
                 {
                     error = "no Vulkan loader (libvulkan.so.1 / vulkan-1.dll): install the GPU's Vulkan driver";
                     return false;
@@ -1031,6 +1049,12 @@ namespace rhi
                         m_debugUtils = true;
                 if (m_debugUtils)
                     extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+                bool portability = false;  // [macOS] MoltenVK is a "portability" driver: listed only when asked for
+                for (const VkExtensionProperties &e : available)
+                    if (std::strcmp(e.extensionName, "VK_KHR_portability_enumeration") == 0)
+                        portability = true;
+                if (portability)
+                    extensions.push_back("VK_KHR_portability_enumeration");
                 std::vector<const char *> layers;
                 if (desc.debug)
                 {
@@ -1053,6 +1077,8 @@ namespace rhi
                 ci.ppEnabledExtensionNames = extensions.data();
                 ci.enabledLayerCount = static_cast<uint32_t>(layers.size());
                 ci.ppEnabledLayerNames = layers.data();
+                if (portability)
+                    ci.flags |= 0x00000001; // VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR
                 VkResult r = vkCreateInstance(&ci, nullptr, &m_core->instance);
                 if (r != VK_SUCCESS)
                 {
@@ -1222,6 +1248,8 @@ namespace rhi
                 std::vector<const char *> extensions{VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME};
                 if (!m_offscreen)
                     extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+                if (deviceHas("VK_KHR_portability_subset")) // [macOS] must be enabled when MoltenVK offers it
+                    extensions.push_back("VK_KHR_portability_subset");
                 // GPU time on the CPU's clock (the input delay, PS2X_RHI_STATS): CLOCK_MONOTONIC is steady_clock on Linux
                 if (statsOn() && deviceHas(VK_KHR_CALIBRATED_TIMESTAMPS_EXTENSION_NAME))
                 {
