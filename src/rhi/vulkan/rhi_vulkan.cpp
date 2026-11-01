@@ -1050,9 +1050,11 @@ namespace rhi
                 if (m_debugUtils)
                     extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
                 bool portability = false;  // [macOS] MoltenVK is a "portability" driver: listed only when asked for
+#if defined(__APPLE__) // elsewhere the native drivers only, as before (no Dozen etc. in the device choice)
                 for (const VkExtensionProperties &e : available)
                     if (std::strcmp(e.extensionName, "VK_KHR_portability_enumeration") == 0)
                         portability = true;
+#endif
                 if (portability)
                     extensions.push_back("VK_KHR_portability_enumeration");
                 std::vector<const char *> layers;
