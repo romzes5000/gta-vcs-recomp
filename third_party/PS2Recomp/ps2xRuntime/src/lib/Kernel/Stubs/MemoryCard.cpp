@@ -933,6 +933,14 @@ namespace ps2_stubs
                 const double b = (st.stx_mask & STATX_BTIME) ? static_cast<double>(st.stx_btime.tv_sec) + st.stx_btime.tv_nsec / 1e9 : m;
                 return {b, m};
             }
+#elif defined(__APPLE__)
+            struct stat st{};
+            if (stat(path.c_str(), &st) == 0)
+            {
+                const double m = static_cast<double>(st.st_mtimespec.tv_sec) + st.st_mtimespec.tv_nsec / 1e9;
+                const double b = static_cast<double>(st.st_birthtimespec.tv_sec) + st.st_birthtimespec.tv_nsec / 1e9;
+                return {b, m};
+            }
 #endif
             std::error_code ec;
             const double m = static_cast<double>(fileTimeToTimeTMc(std::filesystem::last_write_time(path, ec)));
