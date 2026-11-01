@@ -346,6 +346,15 @@ namespace platform
             std::fprintf(stderr, "[platform] no audio: %s\n", SDL_GetError());
 
         // created hidden, placed, then shown: no flash at the default place
+#ifdef __APPLE__
+        // [macOS] SDL's default dlopen("libvulkan.dylib") misses Homebrew's prefix (not on dyld's search path), so a
+        // Vulkan window fails; load the loader from there first (the RHI's volk takes the same paths)
+        if (desc.vulkan && !SDL_GetHint(SDL_HINT_VULKAN_LIBRARY) && !SDL_Vulkan_LoadLibrary(nullptr))
+            for (const char *path : {"/opt/homebrew/lib/libvulkan.1.dylib", "/usr/local/lib/libvulkan.1.dylib",
+                                     "/opt/homebrew/lib/libMoltenVK.dylib", "/usr/local/lib/libMoltenVK.dylib"})
+                if (SDL_Vulkan_LoadLibrary(path))
+                    break;
+#endif
         g_window = SDL_CreateWindow(desc.title, desc.width, desc.height,
                                     SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN | (desc.vulkan ? SDL_WINDOW_VULKAN : 0));
         if (!g_window)
