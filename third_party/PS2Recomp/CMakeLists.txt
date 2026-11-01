@@ -58,6 +58,10 @@ if(PS2X_IS_ARM_TARGET)
 
     include_directories(${sse2neon_SOURCE_DIR})
     add_compile_definitions(USE_SSE2NEON)
+    # x86 MINPS/MAXPS return the 2nd operand when either input is NaN; NEON vmin/vmax return NaN.
+    # PS2 floats with exponent 255 are finite on hardware but NaN/Inf on the host, so VU MIN/MAX
+    # clamps must keep x86 semantics.
+    add_compile_definitions(SSE2NEON_PRECISE_MINMAX=1)
 
     if(PS2X_IS_AARCH64_TARGET AND APPLE)
         # macOS ARM64 already uses optimal defaults
